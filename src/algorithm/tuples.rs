@@ -110,9 +110,9 @@ fn tuple2(f: SigNode, env: &mut Uiua) -> UiuaResult {
     'blk: {
         let res = match f.node.as_slice() {
             [Node::Prim(Primitive::Lt, _)] => xs.choose(k, false, false, env)?,
-            [Node::Prim(Primitive::Le, _)] if n >= k => xs.choose(k, false, true, env)?,
+            [Node::Prim(Primitive::Le, _)] => xs.choose(k, false, true, env)?,
             [Node::Prim(Primitive::Gt, _)] => xs.choose(k, true, false, env)?,
-            [Node::Prim(Primitive::Ge, _)] if n >= k => xs.choose(k, true, true, env)?,
+            [Node::Prim(Primitive::Ge, _)] => xs.choose(k, true, true, env)?,
             [Node::Prim(Primitive::Ne, _)] => xs.permute(k, env)?,
             [Node::Prim(Primitive::Eq | Primitive::Match, _)] if is_scalar => {
                 let n = xs.as_nat(env, "Tuples of scalar must be a natural number")?;
@@ -332,10 +332,13 @@ impl Value {
 }
 
 pub fn combinations(n: usize, k: usize, same: bool) -> f64 {
-    if k > n {
+    if k > n && !same {
         return 0.0;
     }
     let calc_n = if same { n + k - 1 } else { n };
+    if calc_n < k {
+        return 0.0;
+    }
     (1..=k.min(calc_n - k))
         .map(|i| (calc_n + 1 - i) as f64 / i as f64)
         .product::<f64>()
@@ -369,13 +372,13 @@ impl<T: ArrayValue> Array<T> {
         }
         shape[0] = combinations.round() as usize;
         shape.insert(1, k);
-        if n < k {
+        if n < k && !same {
             return Ok(Array::new(shape, []));
         }
         let elem_count = validate_size::<T>(shape.iter().copied(), env)?;
         let row_len = self.row_len();
         let at = |i| &self.data[i * row_len..][..row_len];
-        Ok(match (k, n - k) {
+        Ok(match (k, n.saturating_sub(k)) {
             (1, _) => Array::new(shape, self.data.clone()),
             (_, 0) if !same => Array::new(shape, self.data.clone()),
             (_, 1) if !same => {
